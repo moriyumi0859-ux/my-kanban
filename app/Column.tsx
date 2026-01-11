@@ -7,9 +7,10 @@ interface ColumnProps {
   title: string;
   tasks: any[];
   onDelete: (id: string) => void;
+  onUpdateDate: (id: string, newDate: string) => void; // 期限更新用の定義を追加
 }
 
-export function Column({ id, title, tasks, onDelete }: ColumnProps) {
+export function Column({ id, title, tasks, onDelete, onUpdateDate }: ColumnProps) {
   const { setNodeRef } = useDroppable({ id });
 
   return (
@@ -26,8 +27,9 @@ export function Column({ id, title, tasks, onDelete }: ColumnProps) {
               key={task.id} 
               id={task.id} 
               content={task.content} 
-              due_date={task.due_date} // ここで期限を渡す
+              due_date={task.due_date} 
               onDelete={onDelete} 
+              onUpdateDate={onUpdateDate} // TaskCardへ更新機能を渡す
             />
           ))}
         </div>

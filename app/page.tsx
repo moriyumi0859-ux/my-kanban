@@ -16,16 +16,25 @@ const COLUMNS = [
 export default function Home() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [newTaskContent, setNewTaskContent] = useState("");
-  const [newDueDate, setNewDueDate] = useState(""); // 日付用のState
+  const [newDueDate, setNewDueDate] = useState("");
 
+  // 【保存のキモ】起動時にSupabaseからデータを強制的に持ってくる
   useEffect(() => {
-    const fetchTasks = async () => {
-      const { data, error } = await supabase.from("tasks").select("*").order("created_at", { ascending: true });
-      if (error) console.error(error);
-      else setTasks(data || []);
-    };
     fetchTasks();
   }, []);
+
+  const fetchTasks = async () => {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: true });
+    
+    if (error) {
+      console.error("データ取得エラー:", error);
+    } else {
+      setTasks(data || []);
+    }
+  };
 
   const addTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,15 +44,24 @@ export default function Home() {
       id: Date.now().toString(),
       content: newTaskContent,
       status: "todo",
-      due_date: newDueDate || null, // 日付があれば保存
+      due_date: newDueDate || null,
     };
 
+    // 先に画面に表示（サクサク感を出す）
     setTasks([...tasks, newTask]);
     setNewTaskContent("");
     setNewDueDate("");
 
+    // Supabaseに保存
     const { error } = await supabase.from("tasks").insert([newTask]);
-    if (error) console.error(error);
+    if (error) alert("保存に失敗しました。設定を確認してください。");
+  };
+
+  // 【追加】期限を後から変更する関数
+  const updateTaskDate = async (id: string, newDate: string) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, due_date: newDate } : t));
+    const { error } = await supabase.from("tasks").update({ due_date: newDate }).eq("id", id);
+    if (error) console.error("更新エラー:", error);
   };
 
   const deleteTask = async (id: string) => {
@@ -53,6 +71,7 @@ export default function Home() {
     }
   };
 
+  // ドラッグ操作（以前と同じ）
   const handleDragOver = async (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -82,24 +101,12 @@ export default function Home() {
     <main className="min-h-screen bg-slate-50 p-8 text-slate-900">
       <h1 className="text-4xl font-extrabold mb-8 text-center bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Project Board</h1>
 
-      {/* 入力フォーム */}
       <div className="max-w-md mx-auto mb-12 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
         <form onSubmit={addTask} className="flex flex-col gap-3">
-          <input
-            type="text"
-            value={newTaskContent}
-            onChange={(e) => setNewTaskContent(e.target.value)}
-            placeholder="何をしますか？"
-            className="p-3 rounded-xl border border-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <input type="text" value={newTaskContent} onChange={(e) => setNewTaskContent(e.target.value)} placeholder="タスクを入力..." className="p-3 rounded-xl border border-slate-100 focus:ring-2 focus:ring-blue-500" />
           <div className="flex gap-2">
-            <input
-              type="date"
-              value={newDueDate}
-              onChange={(e) => setNewDueDate(e.target.value)}
-              className="flex-1 p-2 rounded-xl border border-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition-all font-bold">追加</button>
+            <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="flex-1 p-2 rounded-xl border border-slate-100 text-sm" />
+            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 font-bold">追加</button>
           </div>
         </form>
       </div>
@@ -107,7 +114,7 @@ export default function Home() {
       <DndContext collisionDetection={closestCorners} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="flex gap-6 justify-center">
           {COLUMNS.map((col) => (
-            <Column key={col.id} id={col.id} title={col.title} tasks={tasks.filter(t => t.status === col.id)} onDelete={deleteTask} />
+            <Column key={col.id} id={col.id} title={col.title} tasks={tasks.filter(t => t.status === col.id)} onDelete={deleteTask} onUpdateDate={updateTaskDate} />
           ))}
         </div>
       </DndContext>
