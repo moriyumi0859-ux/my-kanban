@@ -24,7 +24,6 @@ export default function Home() {
   }, []);
 
   const fetchTasks = async () => {
-    console.log("データベースからデータを取得中...");
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
@@ -33,7 +32,6 @@ export default function Home() {
     if (error) {
       console.error("データ取得エラー:", error.message);
     } else {
-      console.log("取得成功:", data);
       setTasks(data || []);
     }
   };
@@ -42,41 +40,44 @@ export default function Home() {
     e.preventDefault();
     if (!newTaskContent.trim()) return;
 
-    const newTask = {
-      id: Date.now().toString(),
+    // Supabaseに送るデータを整理
+    const taskData = {
       content: newTaskContent,
       status: "todo",
-      due_date: newDueDate || null,
+      due_date: newDueDate || null, // 空文字の場合はnullにして送る
     };
 
-    setTasks([...tasks, newTask]);
-    setNewTaskContent("");
-    setNewDueDate("");
+    // 1. まずSupabaseへ保存を試みる
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert([taskData])
+      .select(); // 挿入したデータを取得する設定
 
-    const { error } = await supabase.from("tasks").insert([newTask]);
     if (error) {
-      alert("追加に失敗しました: " + error.message);
+      // エラーが出た場合は具体的な理由を表示
+      alert(`保存に失敗しました。\n理由: ${error.message}\n(ヒント: Supabaseの列名が due_date になっているか確認してください)`);
+      console.error("Supabase Error:", error);
+    } else {
+      // 2. 成功したら画面のリストに追加（IDはSupabaseが発行したものを使う）
+      if (data) {
+        setTasks([...tasks, data[0]]);
+        setNewTaskContent("");
+        setNewDueDate("");
+      }
     }
   };
 
-  // 【修正】期限を更新し、結果をアラートで知らせる
   const updateTaskDate = async (id: string, newDate: string) => {
-    console.log("日付を更新します:", id, newDate);
-
     // 見た目を先に更新
     setTasks(prev => prev.map(t => t.id === id ? { ...t, due_date: newDate } : t));
 
-    // Supabaseを更新
     const { error } = await supabase
       .from("tasks")
-      .update({ due_date: newDate })
+      .update({ due_date: newDate || null })
       .eq("id", id);
 
     if (error) {
-      console.error("更新失敗:", error.message);
-      alert("データベースの保存に失敗しました: " + error.message);
-    } else {
-      console.log("データベース保存成功！");
+      alert("日付の保存に失敗しました: " + error.message);
     }
   };
 
@@ -124,10 +125,10 @@ export default function Home() {
 
       <div className="max-w-md mx-auto mb-12 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
         <form onSubmit={addTask} className="flex flex-col gap-3">
-          <input type="text" value={newTaskContent} onChange={(e) => setNewTaskContent(e.target.value)} placeholder="タスクを入力..." className="p-3 rounded-xl border border-slate-100 focus:ring-2 focus:ring-blue-500" />
+          <input type="text" value={newTaskContent} onChange={(e) => setNewTaskContent(e.target.value)} placeholder="タスクを入力..." className="p-3 rounded-xl border border-slate-100 focus:ring-2 focus:ring-blue-500 shadow-inner" />
           <div className="flex gap-2">
-            <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="flex-1 p-2 rounded-xl border border-slate-100 text-sm" />
-            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 font-bold">追加</button>
+            <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="flex-1 p-2 rounded-xl border border-slate-100 text-sm cursor-pointer" />
+            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition-all font-bold shadow-md">追加</button>
           </div>
         </form>
       </div>
