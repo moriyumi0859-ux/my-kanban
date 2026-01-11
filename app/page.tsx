@@ -18,20 +18,22 @@ export default function Home() {
   const [newTaskContent, setNewTaskContent] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
 
-  // 【保存のキモ】起動時にSupabaseからデータを強制的に持ってくる
+  // アプリ起動時にデータを読み込む
   useEffect(() => {
     fetchTasks();
   }, []);
 
   const fetchTasks = async () => {
+    console.log("データベースからデータを取得中...");
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
       .order("created_at", { ascending: true });
     
     if (error) {
-      console.error("データ取得エラー:", error);
+      console.error("データ取得エラー:", error.message);
     } else {
+      console.log("取得成功:", data);
       setTasks(data || []);
     }
   };
@@ -47,31 +49,48 @@ export default function Home() {
       due_date: newDueDate || null,
     };
 
-    // 先に画面に表示（サクサク感を出す）
     setTasks([...tasks, newTask]);
     setNewTaskContent("");
     setNewDueDate("");
 
-    // Supabaseに保存
     const { error } = await supabase.from("tasks").insert([newTask]);
-    if (error) alert("保存に失敗しました。設定を確認してください。");
+    if (error) {
+      alert("追加に失敗しました: " + error.message);
+    }
   };
 
-  // 【追加】期限を後から変更する関数
+  // 【修正】期限を更新し、結果をアラートで知らせる
   const updateTaskDate = async (id: string, newDate: string) => {
+    console.log("日付を更新します:", id, newDate);
+
+    // 見た目を先に更新
     setTasks(prev => prev.map(t => t.id === id ? { ...t, due_date: newDate } : t));
-    const { error } = await supabase.from("tasks").update({ due_date: newDate }).eq("id", id);
-    if (error) console.error("更新エラー:", error);
+
+    // Supabaseを更新
+    const { error } = await supabase
+      .from("tasks")
+      .update({ due_date: newDate })
+      .eq("id", id);
+
+    if (error) {
+      console.error("更新失敗:", error.message);
+      alert("データベースの保存に失敗しました: " + error.message);
+    } else {
+      console.log("データベース保存成功！");
+    }
   };
 
   const deleteTask = async (id: string) => {
     if (window.confirm("削除しますか？")) {
-      setTasks((prev) => prev.filter((t) => t.id !== id));
-      await supabase.from("tasks").delete().eq("id", id);
+      const { error } = await supabase.from("tasks").delete().eq("id", id);
+      if (error) {
+        alert("削除に失敗しました: " + error.message);
+      } else {
+        setTasks((prev) => prev.filter((t) => t.id !== id));
+      }
     }
   };
 
-  // ドラッグ操作（以前と同じ）
   const handleDragOver = async (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -83,7 +102,9 @@ export default function Home() {
     if (overColumnId && activeTask.status !== overColumnId) {
       const newStatus = overColumnId as string;
       setTasks((prev) => prev.map((t) => (t.id === activeId ? { ...t, status: newStatus } : t)));
-      await supabase.from("tasks").update({ status: newStatus }).eq("id", activeId);
+      
+      const { error } = await supabase.from("tasks").update({ status: newStatus }).eq("id", activeId);
+      if (error) console.error("移動の保存に失敗:", error.message);
     }
   };
 
