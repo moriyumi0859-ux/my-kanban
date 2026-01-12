@@ -5,6 +5,7 @@ import { LogOut, User } from "lucide-react";
 import { 
   DndContext, 
   closestCorners, 
+  DragStartEvent, // 追加
   DragEndEvent, 
   DragOverEvent,
   PointerSensor,
@@ -30,11 +31,10 @@ export default function Home() {
   const [loginInput, setLoginInput] = useState("");
   const [passInput, setPassInput] = useState("");
 
-  // ドラッグ操作の感度設定（クリックとドラッグを誤認させないため）
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5, // 5px動かしたらドラッグ開始
+        distance: 5,
       },
     })
   );
@@ -57,7 +57,6 @@ export default function Home() {
     if (error) {
       console.error("データ取得エラー:", error.message);
     } else {
-      // 重要：IDを文字列に変換してセット（ドラッグ可能にするため）
       const formattedTasks = (data || []).map(t => ({
         ...t,
         id: String(t.id)
@@ -69,14 +68,7 @@ export default function Home() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginInput || !passInput) return;
-
-    const { data } = await supabase
-      .from("users")
-      .select("*")
-      .eq("name", loginInput)
-      .eq("password", passInput)
-      .single();
-
+    const { data } = await supabase.from("users").select("*").eq("name", loginInput).eq("password", passInput).single();
     if (data) {
       setIsLoggedIn(true);
       setUserName(data.name);
@@ -88,10 +80,7 @@ export default function Home() {
 
   const handleRegister = async () => {
     if (!loginInput || !passInput) return;
-    const { error } = await supabase
-      .from("users")
-      .insert([{ name: loginInput, password: passInput }]);
-
+    const { error } = await supabase.from("users").insert([{ name: loginInput, password: passInput }]);
     if (error) alert("登録に失敗しました");
     else alert("登録完了！ログインしてください。");
   };
@@ -105,57 +94,55 @@ export default function Home() {
   const addTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskContent.trim()) return;
-
-    const taskData = {
-      content: newTaskContent,
-      status: "todo",
-      due_date: newDueDate || null,
-      user_name: userName,
-    };
-
+    const taskData = { content: newTaskContent, status: "todo", due_date: newDueDate || null, user_name: userName };
     const { data, error } = await supabase.from("tasks").insert([taskData]).select();
-
     if (error) alert("保存失敗");
     else if (data) {
-      // 追加したデータもIDを文字列にして管理
       setTasks([...tasks, { ...data[0], id: String(data[0].id) }]);
       setNewTaskContent("");
       setNewDueDate("");
     }
   };
 
-  const updateTaskDate = async (id: string, newDate: string) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, due_date: newDate } : t));
-    await supabase.from("tasks").update({ due_date: newDate || null }).eq("id", id);
-  };
-
-  const deleteTask = async (id: string) => {
-    if (window.confirm("削除しますか？")) {
-      await supabase.from("tasks").delete().eq("id", id);
-      setTasks((prev) => prev.filter((t) => t.id !== id));
+  // --- ドラッグ制御の追加 ---
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const draggedTask = tasks.find(t => t.id === active.id);
+    
+    // 自分のタスクでない場合はドラッグを開始させない
+    if (draggedTask && draggedTask.user_name !== userName) {
+      // dnd-kitはDragStartを直接キャンセルする機能がないため、
+      // 実際には handleDragOver と handleDragEnd で処理を止めるようにします。
+      console.log("他人のタスクは操作できません");
     }
   };
 
   const handleDragOver = async (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
-    const activeId = active.id;
-    const overId = over.id;
-    const activeTask = tasks.find((t) => t.id === activeId);
-    if (!activeTask) return;
+    
+    const activeTask = tasks.find((t) => t.id === active.id);
+    // 【ガード設定】自分のタスクでないなら何もしない
+    if (!activeTask || activeTask.user_name !== userName) return;
 
+    const overId = over.id;
     const overColumnId = COLUMNS.find(col => col.id === overId) ? overId : tasks.find(t => t.id === overId)?.status;
     
     if (overColumnId && activeTask.status !== overColumnId) {
       const newStatus = overColumnId as string;
-      setTasks((prev) => prev.map((t) => (t.id === activeId ? { ...t, status: newStatus } : t)));
-      await supabase.from("tasks").update({ status: newStatus }).eq("id", activeId);
+      setTasks((prev) => prev.map((t) => (t.id === active.id ? { ...t, status: newStatus } : t)));
+      await supabase.from("tasks").update({ status: newStatus }).eq("id", active.id);
     }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+
+    const activeTask = tasks.find((t) => t.id === active.id);
+    // 【ガード設定】自分のタスクでないなら何もしない
+    if (!activeTask || activeTask.user_name !== userName) return;
+
     setTasks((items) => {
       const oldIndex = items.findIndex((item) => item.id === active.id);
       const newIndex = items.findIndex((item) => item.id === over.id);
@@ -163,6 +150,29 @@ export default function Home() {
     });
   };
 
+  const updateTaskDate = async (id: string, newDate: string) => {
+    const targetTask = tasks.find(t => t.id === id);
+    if (targetTask?.user_name !== userName) {
+      alert("自分のタスク以外の日付は変更できません");
+      return;
+    }
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, due_date: newDate } : t));
+    await supabase.from("tasks").update({ due_date: newDate || null }).eq("id", id);
+  };
+
+  const deleteTask = async (id: string) => {
+    const targetTask = tasks.find(t => t.id === id);
+    if (targetTask?.user_name !== userName) {
+      alert("自分のタスク以外は削除できません");
+      return;
+    }
+    if (window.confirm("削除しますか？")) {
+      await supabase.from("tasks").delete().eq("id", id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    }
+  };
+
+  // --- UI部分は以前と同じ ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -203,6 +213,7 @@ export default function Home() {
       <DndContext 
         sensors={sensors}
         collisionDetection={closestCorners} 
+        onDragStart={handleDragStart} // 追加
         onDragOver={handleDragOver} 
         onDragEnd={handleDragEnd}
       >
