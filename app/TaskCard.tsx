@@ -12,22 +12,22 @@ export function TaskCard({ id, content, due_date, userName, currentUserName, onD
     opacity: isDragging ? 0.3 : 1,
   };
 
-// 判定部分をこのように書き換えてみてください
+  // --- 判定ロジック ---
+  // 前後の空白を消して確実に比較します
   const isMine = userName?.trim() === currentUserName?.trim();
 
-  // テスト用：もし自分なら「背景を黄色」にする（絶対に気づく色）
-  const myTaskClass = isMine 
-    ? "border-blue-500 bg-yellow-50 shadow-md ring-4 ring-blue-400" 
-    : "border-gray-200 bg-slate-50 opacity-60";　
+  // 期限チェック（今日以前なら緊急）
+  const todayStr = new Date().toLocaleDateString('sv-SE');
+  const isUrgent = due_date && due_date <= todayStr;
 
-  // --- 【視認性を極限まで上げたデザイン設定】 ---
-  // 自分のタスク：青い太枠 + 影 + 外側の光
-  // 他人のタスク：薄い背景 + 文字を薄く
+  // --- デザイン設定 ---
+  // 自分のタスク：青い太枠 + 外側の光 + はっきりした文字
+  // 他人のタスク：薄い背景 + 文字を薄く（触れないことを強調）
   const appearanceClass = isMine 
     ? "border-blue-500 bg-white shadow-md ring-4 ring-blue-100" 
     : "border-gray-200 bg-slate-50 opacity-60 grayscale-[0.5]";
 
-  // 期限切れ・当日の赤い背景（自分のタスクの時だけより赤く）
+  // 期限が今日以前の場合のデザイン上書き
   const urgentClass = isUrgent ? "bg-red-50 border-red-400 ring-red-100" : "";
 
   return (
@@ -40,7 +40,6 @@ export function TaskCard({ id, content, due_date, userName, currentUserName, onD
       <div {...attributes} {...listeners} className={isMine ? "cursor-grab" : "cursor-default"}>
         <div className="flex justify-between items-start mb-1">
           <div className="flex items-center gap-1">
-            {/* 自分の名前にアイコンを添える */}
             <p className={`text-[10px] font-black ${isMine ? "text-blue-700" : "text-gray-400"}`}>
               {isMine ? "★ " : ""}{userName} {isMine && "(あなた)"}
             </p>
