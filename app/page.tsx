@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import React, { useState, useEffect } from "react";
-import { LogOut, User } from "lucide-react";
+import { User } from "lucide-react";
 import { 
   DndContext, closestCorners, DragEndEvent, DragOverEvent, DragStartEvent,
   PointerSensor, useSensor, useSensors, DragOverlay 
@@ -26,40 +26,31 @@ export default function Home() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-useEffect(() => {
+  useEffect(() => {
     const saved = localStorage.getItem("kanban-user");
     if (saved) { setUserName(saved); setIsLoggedIn(true); }
     fetchTasks();
 
-    // --- ここから【通知機能】の設定 ---
     const channel = supabase
-      .channel("tasks-changes") // 監視用のチャンネル名（何でもOK）
-      .on(
-        "postgres_changes", 
-        { event: "INSERT", schema: "public", table: "tasks" }, 
-        (payload) => {
-          // 自分以外の人が追加したときだけ通知を出す
-          if (payload.new.user_name !== userName) {
-            alert(`${payload.new.user_name}さんが新しいタスク「${payload.new.content}」を追加しました！`);
-            fetchTasks(); // 画面を最新の状態に更新
-          }
+      .channel("tasks-changes")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (payload) => {
+        if (payload.new.user_name !== userName) {
+          alert(`${payload.new.user_name}さんが新しいタスクを追加しました！`);
+          fetchTasks(); 
         }
-      )
+      })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel); // 画面を閉じたら監視を止める
-    };
-
+    return () => { supabase.removeChannel(channel); };
   }, [userName]);
 
-const fetchTasks = async () => {
-    // due_date を昇順（ascending: true）で並べ、同じ日付なら作成順にする
+  // 日付順に読み込むが、ドラッグ中の状態を邪魔しないようにします
+  const fetchTasks = async () => {
     const { data } = await supabase
       .from("tasks")
       .select("*")
-      .order("due_date", { ascending: true, nullsFirst: false }) // 日付が近い順。未設定(null)は一番下に。
-      .order("created_at", { ascending: true }); // 同じ日付なら古い順
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
 
     if (data) setTasks(data.map((t: any) => ({ ...t, id: String(t.id) })));
   };
@@ -68,23 +59,18 @@ const fetchTasks = async () => {
     e.preventDefault();
     const { data } = await supabase.from("users").select("*").eq("name", loginInput).eq("password", passInput).single();
     if (data) {
-      setUserName(data.name);
-      setIsLoggedIn(true);
+      setUserName(data.name); setIsLoggedIn(true);
       localStorage.setItem("kanban-user", data.name);
       fetchTasks();
     } else {
-      alert("名前または暗証番号が正しくありません。");
+      alert("ログイン失敗");
     }
   };
 
   const handleRegister = async () => {
-    if (!loginInput || !passInput) {
-      alert("名前と暗証番号を入力してください。");
-      return;
-    }
+    if (!loginInput || !passInput) return alert("入力してください");
     const { error } = await supabase.from("users").insert([{ name: loginInput, password: passInput }]);
-    if (error) alert("登録に失敗しました。");
-    else alert("登録成功！");
+    if (error) alert("登録失敗"); else alert("登録成功！");
   };
 
   const addTask = async (e: React.FormEvent) => {
@@ -94,13 +80,13 @@ const fetchTasks = async () => {
       content: newTaskContent, status: "todo", due_date: newDueDate || null, user_name: userName 
     }]).select();
     if (data) {
-      setTasks([...tasks, { ...data[0], id: String(data[0].id) }]);
+      setTasks(prev => [...prev, { ...data[0], id: String(data[0].id) }]);
       setNewTaskContent(""); setNewDueDate("");
     }
   };
 
   const deleteTask = async (id: string) => {
-    if (window.confirm("このタスクを削除しますか？")) {
+    if (window.confirm("削除しますか？")) {
       const { error } = await supabase.from("tasks").delete().eq("id", id);
       if (!error) setTasks(prev => prev.filter(t => t.id !== id));
     }
@@ -120,6 +106,7 @@ const fetchTasks = async () => {
     const overIdStr = String(over.id);
     const activeTask = tasks.find(t => t.id === activeIdStr);
     if (!activeTask || activeTask.user_name !== userName) return;
+
     const overColId = COLUMNS.some(c => c.id === overIdStr) ? overIdStr : tasks.find(t => t.id === overIdStr)?.status;
     if (overColId && activeTask.status !== overColId) {
       setTasks(prev => prev.map(t => t.id === activeIdStr ? { ...t, status: overColId } : t));
@@ -130,16 +117,20 @@ const fetchTasks = async () => {
     const { active, over } = e;
     setActiveId(null);
     if (!over) return;
+
     const activeIdStr = String(active.id);
+    const overIdStr = String(over.id);
     const activeTask = tasks.find(t => t.id === activeIdStr);
+
     if (activeTask && activeTask.user_name === userName) {
+      // データベースを更新（移動を確定）
       await supabase.from("tasks").update({ status: activeTask.status }).eq("id", active.id);
-      if (active.id !== over.id) {
-        setTasks(prev => {
-          const oldIdx = prev.findIndex(t => t.id === activeIdStr);
-          const newIdx = prev.findIndex(t => t.id === String(over.id));
-          if (newIdx !== -1) return arrayMove(prev, oldIdx, newIdx);
-          return prev;
+      
+      if (activeIdStr !== overIdStr) {
+        setTasks((prev) => {
+          const oldIndex = prev.findIndex((t) => t.id === activeIdStr);
+          const newIndex = prev.findIndex((t) => t.id === overIdStr);
+          return arrayMove(prev, oldIndex, newIndex);
         });
       }
     }
@@ -186,15 +177,7 @@ const fetchTasks = async () => {
           </div>
           <DragOverlay>
             {activeId ? (
-              <TaskCard 
-                id={activeId} 
-                content={tasks.find(t => t.id === activeId)?.content} 
-                due_date={tasks.find(t => t.id === activeId)?.due_date} 
-                userName={tasks.find(t => t.id === activeId)?.user_name} 
-                currentUserName={userName} 
-                onDelete={() => {}} 
-                isOverlay 
-              />
+              <TaskCard id={activeId} content={tasks.find(t => t.id === activeId)?.content} due_date={tasks.find(t => t.id === activeId)?.due_date} userName={tasks.find(t => t.id === activeId)?.user_name} currentUserName={userName} onDelete={() => {}} isOverlay />
             ) : null}
           </DragOverlay>
         </DndContext>
