@@ -12,22 +12,22 @@ export function TaskCard({ id, content, due_date, userName, currentUserName, onD
     opacity: isDragging ? 0.3 : 1,
   };
 
-  // --- 判定ロジック ---
-  // 前後の空白を消して確実に比較します
+  // --- 1. 判定ロジック ---
+  // 自分のタスクかどうか
   const isMine = userName?.trim() === currentUserName?.trim();
 
-  // 期限チェック（今日以前なら緊急）
+  // 期限が今日以前かどうか（ここでエラーの原因だった変数を定義しました）
   const todayStr = new Date().toLocaleDateString('sv-SE');
   const isUrgent = due_date && due_date <= todayStr;
 
-  // --- デザイン設定 ---
-  // 自分のタスク：青い太枠 + 外側の光 + はっきりした文字
-  // 他人のタスク：薄い背景 + 文字を薄く（触れないことを強調）
+  // --- 2. デザイン設定 ---
+  // 自分のタスク：青い太枠 + 外側の光
+  // 他人のタスク：薄い背景 + 文字を薄く
   const appearanceClass = isMine 
     ? "border-blue-500 bg-white shadow-md ring-4 ring-blue-100" 
     : "border-gray-200 bg-slate-50 opacity-60 grayscale-[0.5]";
 
-  // 期限が今日以前の場合のデザイン上書き
+  // 期限切れ・当日の赤い背景
   const urgentClass = isUrgent ? "bg-red-50 border-red-400 ring-red-100" : "";
 
   return (
