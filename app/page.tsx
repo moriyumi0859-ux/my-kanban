@@ -185,7 +185,15 @@ export default function Home() {
       <DndContext collisionDetection={closestCorners} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="flex gap-6 justify-center overflow-x-auto pb-4">
           {COLUMNS.map((col) => (
-            <Column key={col.id} id={col.id} title={col.title} tasks={tasks.filter(t => t.status === col.id)} currentUserName={userName}onDelete={deleteTask} onUpdateDate={updateTaskDate} />
+            <Column 
+              key={col.id} 
+              id={col.id} 
+              title={col.title} 
+              tasks={tasks.filter(t => t.status === col.id)} 
+              currentUserName={userName} 
+              onDelete={deleteTask} 
+              onUpdateDate={updateTaskDate} 
+            />
           ))}
         </div>
       </DndContext>

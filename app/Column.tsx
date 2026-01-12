@@ -8,7 +8,7 @@ interface ColumnProps {
   id: string;
   title: string;
   tasks: any[];
-  currentUserName: string; // ← 追加：ログイン中の名前を受け取る定義
+  currentUserName: string;
   onDelete: (id: string) => void;
   onUpdateDate: (id: string, newDate: string) => void;
 }
@@ -32,7 +32,7 @@ export function Column({ id, title, tasks, currentUserName, onDelete, onUpdateDa
               content={task.content} 
               due_date={task.due_date} 
               userName={task.user_name} 
-              currentUserName={currentUserName} // これで赤い波線が消えます
+              currentUserName={currentUserName} 
               onDelete={onDelete} 
               onUpdateDate={onUpdateDate}
             />
