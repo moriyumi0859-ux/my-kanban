@@ -28,6 +28,7 @@ export function Column({ id, title, tasks, onDelete, onUpdateDate }: ColumnProps
               id={task.id} 
               content={task.content} 
               due_date={task.due_date} 
+              userName={task.user_name} // ← ここを追加！
               onDelete={onDelete} 
               onUpdateDate={onUpdateDate} // TaskCardへ更新機能を渡す
             />

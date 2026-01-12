@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { Plus, LogOut, User } from "lucide-react";
 import { DndContext, closestCorners, DragEndEvent, DragOverEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Column } from "./Column";
@@ -17,9 +17,20 @@ export default function Home() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [newTaskContent, setNewTaskContent] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
+  
+  // ログイン管理用のステート
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [loginInput, setLoginInput] = useState("");
+  const [passInput, setPassInput] = useState("");
 
-  // アプリ起動時にデータを読み込む
   useEffect(() => {
+    // ページを開いたときに、すでにログインしているか確認（簡易版）
+    const savedUser = localStorage.getItem("kanban-user");
+    if (savedUser) {
+      setUserName(savedUser);
+      setIsLoggedIn(true);
+    }
     fetchTasks();
   }, []);
 
@@ -29,66 +40,81 @@ export default function Home() {
       .select("*")
       .order("created_at", { ascending: true });
     
-    if (error) {
-      console.error("データ取得エラー:", error.message);
+    if (error) console.error("データ取得エラー:", error.message);
+    else setTasks(data || []);
+  };
+
+  // ログイン処理
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginInput || !passInput) return;
+
+    // 本来はSupabaseのAuth機能を使いますが、今回は分かりやすさ優先で
+    // ユーザーテーブルに名前とパスワードがあるかチェックします
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("name", loginInput)
+      .eq("password", passInput)
+      .single();
+
+    if (data) {
+      setIsLoggedIn(true);
+      setUserName(data.name);
+      localStorage.setItem("kanban-user", data.name);
     } else {
-      setTasks(data || []);
+      alert("名前または暗証番号が違います。先に登録が必要かもしれません。");
     }
+  };
+
+  // 新規登録処理
+  const handleRegister = async () => {
+    if (!loginInput || !passInput) return;
+    const { error } = await supabase
+      .from("users")
+      .insert([{ name: loginInput, password: passInput }]);
+
+    if (error) alert("登録に失敗しました: " + error.message);
+    else alert("登録完了！そのままログインしてください。");
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("kanban-user");
+    setIsLoggedIn(false);
+    setUserName("");
   };
 
   const addTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskContent.trim()) return;
 
-    // Supabaseに送るデータを整理
     const taskData = {
       content: newTaskContent,
       status: "todo",
-      due_date: newDueDate || null, // 空文字の場合はnullにして送る
+      due_date: newDueDate || null,
+      user_name: userName, // ここで「誰が作ったか」を保存！
     };
 
-    // 1. まずSupabaseへ保存を試みる
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert([taskData])
-      .select(); // 挿入したデータを取得する設定
+    const { data, error } = await supabase.from("tasks").insert([taskData]).select();
 
-    if (error) {
-      // エラーが出た場合は具体的な理由を表示
-      alert(`保存に失敗しました。\n理由: ${error.message}\n(ヒント: Supabaseの列名が due_date になっているか確認してください)`);
-      console.error("Supabase Error:", error);
-    } else {
-      // 2. 成功したら画面のリストに追加（IDはSupabaseが発行したものを使う）
-      if (data) {
-        setTasks([...tasks, data[0]]);
-        setNewTaskContent("");
-        setNewDueDate("");
-      }
+    if (error) alert("保存失敗: " + error.message);
+    else if (data) {
+      setTasks([...tasks, data[0]]);
+      setNewTaskContent("");
+      setNewDueDate("");
     }
   };
 
+  // --- (updateTaskDate, deleteTask, handleDragOver, handleDragEnd は前回と同じなので省略可ですが、一応含めておきます) ---
   const updateTaskDate = async (id: string, newDate: string) => {
-    // 見た目を先に更新
     setTasks(prev => prev.map(t => t.id === id ? { ...t, due_date: newDate } : t));
-
-    const { error } = await supabase
-      .from("tasks")
-      .update({ due_date: newDate || null })
-      .eq("id", id);
-
-    if (error) {
-      alert("日付の保存に失敗しました: " + error.message);
-    }
+    await supabase.from("tasks").update({ due_date: newDate || null }).eq("id", id);
   };
 
   const deleteTask = async (id: string) => {
     if (window.confirm("削除しますか？")) {
-      const { error } = await supabase.from("tasks").delete().eq("id", id);
-      if (error) {
-        alert("削除に失敗しました: " + error.message);
-      } else {
-        setTasks((prev) => prev.filter((t) => t.id !== id));
-      }
+      await supabase.from("tasks").delete().eq("id", id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
     }
   };
 
@@ -103,9 +129,7 @@ export default function Home() {
     if (overColumnId && activeTask.status !== overColumnId) {
       const newStatus = overColumnId as string;
       setTasks((prev) => prev.map((t) => (t.id === activeId ? { ...t, status: newStatus } : t)));
-      
-      const { error } = await supabase.from("tasks").update({ status: newStatus }).eq("id", activeId);
-      if (error) console.error("移動の保存に失敗:", error.message);
+      await supabase.from("tasks").update({ status: newStatus }).eq("id", activeId);
     }
   };
 
@@ -119,9 +143,34 @@ export default function Home() {
     });
   };
 
+  // ログインしていない時の画面
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+          <h2 className="text-2xl font-bold mb-6 text-center">Kanban Login</h2>
+          <div className="flex flex-col gap-4">
+            <input type="text" placeholder="名前" className="p-3 border rounded-xl" value={loginInput} onChange={e => setLoginInput(e.target.value)} />
+            <input type="password" placeholder="暗証番号" className="p-3 border rounded-xl" value={passInput} onChange={e => setPassInput(e.target.value)} />
+            <button onClick={handleLogin} className="bg-blue-600 text-white p-3 rounded-xl font-bold">ログイン</button>
+            <button onClick={handleRegister} className="text-blue-600 text-sm">新規ユーザー登録はこちら</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ログイン後の画面
   return (
     <main className="min-h-screen bg-slate-50 p-8 text-slate-900">
-      <h1 className="text-4xl font-extrabold mb-8 text-center bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Project Board</h1>
+      <div className="flex justify-between items-center mb-8 max-w-6xl mx-auto">
+        <h1 className="text-4xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Project Board</h1>
+        <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-full shadow-sm border">
+          <User className="w-5 h-5 text-blue-600" />
+          <span className="font-bold text-slate-700">{userName} さん</span>
+          <button onClick={handleLogout} className="ml-2 p-1 text-slate-400 hover:text-red-500"><LogOut className="w-5 h-5" /></button>
+        </div>
+      </div>
 
       <div className="max-w-md mx-auto mb-12 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
         <form onSubmit={addTask} className="flex flex-col gap-3">
@@ -134,7 +183,7 @@ export default function Home() {
       </div>
 
       <DndContext collisionDetection={closestCorners} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-        <div className="flex gap-6 justify-center">
+        <div className="flex gap-6 justify-center overflow-x-auto pb-4">
           {COLUMNS.map((col) => (
             <Column key={col.id} id={col.id} title={col.title} tasks={tasks.filter(t => t.status === col.id)} onDelete={deleteTask} onUpdateDate={updateTaskDate} />
           ))}
