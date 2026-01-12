@@ -16,8 +16,8 @@ interface ColumnProps {
 export function Column({ id, title, tasks, currentUserName, onDelete, onUpdateDate }: ColumnProps) {
   const { setNodeRef } = useDroppable({ id });
 
-  // ★重要：dnd-kitに「この中にあるタスクのIDのリスト」を教える必要があります
-  const taskIds = tasks.map((t) => t.id);
+  // dnd-kitにこのカラム内のタスクIDを教える
+  const taskIds = tasks.map((t) => String(t.id));
 
   return (
     <div ref={setNodeRef} className="bg-slate-200/50 backdrop-blur-sm p-5 rounded-2xl w-80 min-h-[600px] border border-slate-200 flex flex-col">
@@ -26,13 +26,12 @@ export function Column({ id, title, tasks, currentUserName, onDelete, onUpdateDa
         <span className="bg-slate-300 text-slate-600 px-2 py-0.5 rounded-full text-xs">{tasks.length}</span>
       </div>
 
-      {/* items プロパティに taskIds を渡すことでドラッグが認識されます */}
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div className="flex-1 min-h-[150px]">
           {tasks.map((task) => (
             <TaskCard 
-              key={task.id} 
-              id={task.id} 
+              key={String(task.id)} 
+              id={String(task.id)} 
               content={task.content} 
               due_date={task.due_date} 
               userName={task.user_name} 
