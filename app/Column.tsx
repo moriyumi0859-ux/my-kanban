@@ -1,3 +1,5 @@
+"use client";
+
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { TaskCard } from "./TaskCard";
@@ -6,11 +8,12 @@ interface ColumnProps {
   id: string;
   title: string;
   tasks: any[];
+  currentUserName: string; // ← 追加：ログイン中の名前を受け取る定義
   onDelete: (id: string) => void;
-  onUpdateDate: (id: string, newDate: string) => void; // 期限更新用の定義を追加
+  onUpdateDate: (id: string, newDate: string) => void;
 }
 
-export function Column({ id, title, tasks, onDelete, onUpdateDate }: ColumnProps) {
+export function Column({ id, title, tasks, currentUserName, onDelete, onUpdateDate }: ColumnProps) {
   const { setNodeRef } = useDroppable({ id });
 
   return (
@@ -28,9 +31,10 @@ export function Column({ id, title, tasks, onDelete, onUpdateDate }: ColumnProps
               id={task.id} 
               content={task.content} 
               due_date={task.due_date} 
-              userName={task.user_name} // ← ここを追加！
+              userName={task.user_name} 
+              currentUserName={currentUserName} // これで赤い波線が消えます
               onDelete={onDelete} 
-              onUpdateDate={onUpdateDate} // TaskCardへ更新機能を渡す
+              onUpdateDate={onUpdateDate}
             />
           ))}
         </div>
