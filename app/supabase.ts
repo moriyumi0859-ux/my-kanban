@@ -1,6 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+"use client";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// これを追加することで、ビルド時の「事前作成」によるエラーを強制的に回避します
+export const dynamic = "force-dynamic"; 
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import React, { useState, useEffect } from "react";
+// ...（以下、元のインポートとコードが続く）
