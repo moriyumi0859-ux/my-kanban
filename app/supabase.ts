@@ -1,7 +1,8 @@
-"use client";
+import { createClient } from '@supabase/supabase-js';
 
-// これを追加することで、ビルド時の「事前作成」によるエラーを強制的に回避します
-export const dynamic = "force-dynamic"; 
+// 環境変数が読み込めないビルド時でもエラーにならないための設定
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
 
-import React, { useState, useEffect } from "react";
-// ...（以下、元のインポートとコードが続く）
+// ここで export を付けることで、他のファイル（page.tsx）から呼べるようになります
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
