@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import React, { useState, useEffect } from "react";
-import { User } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { 
   DndContext, closestCorners, DragEndEvent, DragOverEvent, DragStartEvent,
   PointerSensor, useSensor, useSensors, DragOverlay 
@@ -35,6 +35,31 @@ export default function Home() {
   const fetchTasks = async () => {
     const { data } = await supabase.from("tasks").select("*").order("created_at", { ascending: true });
     if (data) setTasks(data.map((t: any) => ({ ...t, id: String(t.id) })));
+  };
+
+  // ログイン処理
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { data } = await supabase.from("users").select("*").eq("name", loginInput).eq("password", passInput).single();
+    if (data) {
+      setUserName(data.name);
+      setIsLoggedIn(true);
+      localStorage.setItem("kanban-user", data.name);
+      fetchTasks();
+    } else {
+      alert("名前または暗証番号が正しくありません。");
+    }
+  };
+
+  // 【復元】新規登録処理
+  const handleRegister = async () => {
+    if (!loginInput || !passInput) {
+      alert("名前と暗証番号を入力してください。");
+      return;
+    }
+    const { error } = await supabase.from("users").insert([{ name: loginInput, password: passInput }]);
+    if (error) alert("登録に失敗しました。既に同じ名前が使われている可能性があります。");
+    else alert("登録成功！そのままログインしてください。");
   };
 
   const addTask = async (e: React.FormEvent) => {
@@ -93,18 +118,15 @@ export default function Home() {
   };
 
   if (!isLoggedIn) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-80 text-center">
-        <h2 className="text-xl font-bold mb-4">Kanban Login</h2>
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          const { data } = await supabase.from("users").select("*").eq("name", loginInput).eq("password", passInput).single();
-          if (data) { setUserName(data.name); setIsLoggedIn(true); localStorage.setItem("kanban-user", data.name); fetchTasks(); }
-          else { alert("ログイン失敗"); }
-        }}>
-          <input className="border w-full p-2 rounded mb-2 outline-none" placeholder="名前" value={loginInput} onChange={e => setLoginInput(e.target.value)} />
-          <input className="border w-full p-2 rounded mb-4 outline-none" type="password" placeholder="暗証番号" value={passInput} onChange={e => setPassInput(e.target.value)} />
-          <button type="submit" className="bg-blue-600 text-white w-full p-2 rounded font-bold">ログイン</button>
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+        <h2 className="text-2xl font-bold mb-6">Kanban Login</h2>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <input className="border w-full p-3 rounded-xl outline-none" placeholder="名前" value={loginInput} onChange={e => setLoginInput(e.target.value)} />
+          <input className="border w-full p-3 rounded-xl outline-none" type="password" placeholder="暗証番号" value={passInput} onChange={e => setPassInput(e.target.value)} />
+          <button type="submit" className="bg-blue-600 text-white w-full p-3 rounded-xl font-bold">ログイン</button>
+          {/* 【復元】新規登録ボタン */}
+          <button type="button" onClick={handleRegister} className="text-blue-600 text-sm hover:underline block w-full">新規ユーザー登録</button>
         </form>
       </div>
     </div>
