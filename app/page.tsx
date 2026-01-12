@@ -44,11 +44,17 @@ export default function Home() {
     return () => { supabase.removeChannel(channel); };
   }, [userName]);
 
-  const fetchTasks = async () => {
-    const { data } = await supabase.from("tasks").select("*").order("created_at", { ascending: true });
+const fetchTasks = async () => {
+    // due_date を昇順（ascending: true）で並べ、同じ日付なら作成順にする
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .order("due_date", { ascending: true, nullsFirst: false }) // 日付が近い順。未設定(null)は一番下に。
+      .order("created_at", { ascending: true }); // 同じ日付なら古い順
+
     if (data) setTasks(data.map((t: any) => ({ ...t, id: String(t.id) })));
   };
-
+  
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data } = await supabase.from("users").select("*").eq("name", loginInput).eq("password", passInput).single();
