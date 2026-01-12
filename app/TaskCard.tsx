@@ -12,10 +12,13 @@ export function TaskCard({ id, content, due_date, userName, currentUserName, onD
     opacity: isDragging ? 0.3 : 1,
   };
 
-  const isMine = userName === currentUserName;
+// 判定部分をこのように書き換えてみてください
+  const isMine = userName?.trim() === currentUserName?.trim();
 
-  const todayStr = new Date().toLocaleDateString('sv-SE');
-  const isUrgent = due_date && due_date <= todayStr;
+  // テスト用：もし自分なら「背景を黄色」にする（絶対に気づく色）
+  const myTaskClass = isMine 
+    ? "border-blue-500 bg-yellow-50 shadow-md ring-4 ring-blue-400" 
+    : "border-gray-200 bg-slate-50 opacity-60";　
 
   // --- 【視認性を極限まで上げたデザイン設定】 ---
   // 自分のタスク：青い太枠 + 影 + 外側の光
