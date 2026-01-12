@@ -26,18 +26,34 @@ export default function Home() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  // --- 修正箇所：通知機能を追加した useEffect ---
   useEffect(() => {
     const saved = localStorage.getItem("kanban-user");
     if (saved) { setUserName(saved); setIsLoggedIn(true); }
     fetchTasks();
-  }, []);
+
+    // リアルタイム監視の設定
+    const channel = supabase
+      .channel("realtime-tasks")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (payload) => {
+        // 自分以外の人が追加した時だけ通知する
+        if (payload.new.user_name !== userName) {
+          alert(`${payload.new.user_name}さんが新しいタスクを追加しました！`);
+          fetchTasks(); 
+        }
+      })
+      .subscribe();
+
+    return () => { 
+      supabase.removeChannel(channel); 
+    };
+  }, [userName]); // userNameが変わった際にも再設定されるようにします
 
   const fetchTasks = async () => {
     const { data } = await supabase.from("tasks").select("*").order("created_at", { ascending: true });
     if (data) setTasks(data.map((t: any) => ({ ...t, id: String(t.id) })));
   };
 
-  // ログイン処理
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data } = await supabase.from("users").select("*").eq("name", loginInput).eq("password", passInput).single();
@@ -51,7 +67,6 @@ export default function Home() {
     }
   };
 
-  // 【復元】新規登録処理
   const handleRegister = async () => {
     if (!loginInput || !passInput) {
       alert("名前と暗証番号を入力してください。");
@@ -100,68 +115,4 @@ export default function Home() {
     }
   };
 
-  const handleDragEnd = async (e: DragEndEvent) => {
-    const { active, over } = e;
-    setActiveId(null);
-    if (!over) return;
-    const activeTask = tasks.find(t => t.id === String(active.id));
-    if (activeTask && activeTask.user_name === userName) {
-      await supabase.from("tasks").update({ status: activeTask.status }).eq("id", active.id);
-      if (active.id !== over.id) {
-        setTasks(prev => {
-          const oldIdx = prev.findIndex(t => t.id === String(active.id));
-          const newIdx = prev.findIndex(t => t.id === String(over.id));
-          return arrayMove(prev, oldIdx, newIdx);
-        });
-      }
-    }
-  };
-
-  if (!isLoggedIn) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-        <h2 className="text-2xl font-bold mb-6">Kanban Login</h2>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <input className="border w-full p-3 rounded-xl outline-none" placeholder="名前" value={loginInput} onChange={e => setLoginInput(e.target.value)} />
-          <input className="border w-full p-3 rounded-xl outline-none" type="password" placeholder="暗証番号" value={passInput} onChange={e => setPassInput(e.target.value)} />
-          <button type="submit" className="bg-blue-600 text-white w-full p-3 rounded-xl font-bold">ログイン</button>
-          {/* 【復元】新規登録ボタン */}
-          <button type="button" onClick={handleRegister} className="text-blue-600 text-sm hover:underline block w-full">新規ユーザー登録</button>
-        </form>
-      </div>
-    </div>
-  );
-
-  return (
-    <main className="p-8 bg-slate-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-10">
-          <h1 className="text-2xl font-bold text-blue-600">Project Board</h1>
-          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border shadow-sm">
-            <User size={16} /> <span className="font-bold text-sm">{userName} さん</span>
-            <button onClick={() => { setIsLoggedIn(false); localStorage.removeItem("kanban-user"); }} className="text-red-500 text-xs ml-2 font-bold">ログアウト</button>
-          </div>
-        </div>
-
-        <form onSubmit={addTask} className="max-w-md mx-auto mb-10 flex flex-col gap-2 bg-white p-4 rounded-xl shadow-sm border">
-          <input className="border p-2 rounded-lg outline-none" value={newTaskContent} onChange={e => setNewTaskContent(e.target.value)} placeholder="タスクを入力..." />
-          <div className="flex gap-2">
-            <input className="border p-2 rounded-lg text-sm flex-1 outline-none" type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">追加</button>
-          </div>
-        </form>
-
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-          <div className="flex gap-6 justify-center">
-            {COLUMNS.map(col => (
-              <Column key={col.id} id={col.id} title={col.title} tasks={tasks.filter(t => t.status === col.id)} currentUserName={userName} onDelete={deleteTask} onUpdateDate={updateTaskDate} />
-            ))}
-          </div>
-          <DragOverlay>
-            {activeId ? <TaskCard id={activeId} content={tasks.find(t => t.id === activeId)?.content} due_date={tasks.find(t => t.id === activeId)?.due_date} userName={tasks.find(t => t.id === activeId)?.user_name} currentUserName={userName} onDelete={() => {}} isOverlay /> : null}
-          </DragOverlay>
-        </DndContext>
-      </div>
-    </main>
-  );
-}
+  const handleDragEnd = async (e: DragEndEvent) =>
