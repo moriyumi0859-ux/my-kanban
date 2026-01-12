@@ -26,22 +26,31 @@ export default function Home() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  useEffect(() => {
+useEffect(() => {
     const saved = localStorage.getItem("kanban-user");
     if (saved) { setUserName(saved); setIsLoggedIn(true); }
     fetchTasks();
 
+    // --- ここから【通知機能】の設定 ---
     const channel = supabase
-      .channel("realtime-tasks")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (payload) => {
-        if (payload.new.user_name !== userName) {
-          alert(`${payload.new.user_name}さんが新しいタスクを追加しました！`);
-          fetchTasks(); 
+      .channel("tasks-changes") // 監視用のチャンネル名（何でもOK）
+      .on(
+        "postgres_changes", 
+        { event: "INSERT", schema: "public", table: "tasks" }, 
+        (payload) => {
+          // 自分以外の人が追加したときだけ通知を出す
+          if (payload.new.user_name !== userName) {
+            alert(`${payload.new.user_name}さんが新しいタスク「${payload.new.content}」を追加しました！`);
+            fetchTasks(); // 画面を最新の状態に更新
+          }
         }
-      })
+      )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel); // 画面を閉じたら監視を止める
+    };
+
   }, [userName]);
 
 const fetchTasks = async () => {
@@ -54,7 +63,7 @@ const fetchTasks = async () => {
 
     if (data) setTasks(data.map((t: any) => ({ ...t, id: String(t.id) })));
   };
-  
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data } = await supabase.from("users").select("*").eq("name", loginInput).eq("password", passInput).single();
