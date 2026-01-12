@@ -16,7 +16,7 @@ interface ColumnProps {
 export function Column({ id, title, tasks, currentUserName, onDelete, onUpdateDate }: ColumnProps) {
   const { setNodeRef } = useDroppable({ id });
 
-  // dnd-kitにこのカラム内のタスクIDを教える
+  // IDを確実に文字列の配列にする
   const taskIds = tasks.map((t) => String(t.id));
 
   return (
@@ -30,8 +30,8 @@ export function Column({ id, title, tasks, currentUserName, onDelete, onUpdateDa
         <div className="flex-1 min-h-[150px]">
           {tasks.map((task) => (
             <TaskCard 
-              key={String(task.id)} 
-              id={String(task.id)} 
+              key={String(task.id)} // ここをStringにする
+              id={String(task.id)}  // ここをStringにする
               content={task.content} 
               due_date={task.due_date} 
               userName={task.user_name} 
