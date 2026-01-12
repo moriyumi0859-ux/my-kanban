@@ -31,7 +31,6 @@ export default function Home() {
     if (saved) { setUserName(saved); setIsLoggedIn(true); }
     fetchTasks();
 
-    // 通知機能（リアルタイム監視）
     const channel = supabase
       .channel("realtime-tasks")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (payload) => {
@@ -69,8 +68,8 @@ export default function Home() {
       return;
     }
     const { error } = await supabase.from("users").insert([{ name: loginInput, password: passInput }]);
-    if (error) alert("登録に失敗しました。既に同じ名前が使われている可能性があります。");
-    else alert("登録成功！そのままログインしてください。");
+    if (error) alert("登録に失敗しました。");
+    else alert("登録成功！");
   };
 
   const addTask = async (e: React.FormEvent) => {
@@ -112,18 +111,18 @@ export default function Home() {
     }
   };
 
-const handleDragEnd = async (e: DragEndEvent) => {
+  const handleDragEnd = async (e: DragEndEvent) => {
     const { active, over } = e;
     setActiveId(null);
     if (!over) return;
-    const activeTask = tasks.find(t => t.id === String(active.id));
+    const activeIdStr = String(active.id);
+    const activeTask = tasks.find(t => t.id === activeIdStr);
     if (activeTask && activeTask.user_name === userName) {
       await supabase.from("tasks").update({ status: activeTask.status }).eq("id", active.id);
       if (active.id !== over.id) {
         setTasks(prev => {
-          const oldIdx = prev.findIndex(t => t.id === String(active.id));
-          const overIdStr = String(over.id);
-          const newIdx = prev.findIndex(t => t.id === overIdStr);
+          const oldIdx = prev.findIndex(t => t.id === activeIdStr);
+          const newIdx = prev.findIndex(t => t.id === String(over.id));
           if (newIdx !== -1) return arrayMove(prev, oldIdx, newIdx);
           return prev;
         });
