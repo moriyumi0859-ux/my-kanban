@@ -14,44 +14,38 @@ export function TaskCard({ id, content, due_date, userName, currentUserName, onD
 
   const isMine = userName === currentUserName;
 
-  // --- 【改良版】期限チェックロジック ---
-  const getDeadlineStatus = () => {
-    if (!due_date) return "normal";
+  // 期限チェック：文字列で比較
+  const todayStr = new Date().toLocaleDateString('sv-SE');
+  const isUrgent = due_date && due_date <= todayStr;
 
-    // 現在の日本時間の日付を YYYY-MM-DD 形式で取得
-    const now = new Date();
-    const todayStr = now.toLocaleDateString('sv-SE'); // "2026-01-13" のような形式
-    
-    // 文字列のまま比較することで、時間のズレ（時差）による誤判定を防ぎます
-    if (due_date < todayStr) return "overdue"; // 期限切れ
-    if (due_date === todayStr) return "today"; // 当日
-    return "normal";
-  };
+  // --- 【強調表示のロジック】 ---
+  // 自分のタスク：青い光の枠 (ring) をつける
+  // 他人のタスク：少し背景をグレーにして透明度を下げる
+  const myTaskClass = isMine 
+    ? "ring-2 ring-blue-400 border-blue-200 bg-white" 
+    : "bg-slate-50/50 border-gray-100 opacity-80";
 
-  const status = getDeadlineStatus();
-  const isUrgent = status === "overdue" || status === "today";
-
-  // 背景色と枠線の判定
-  const bgClass = isUrgent 
-    ? "bg-red-50 border-red-300" 
-    : "bg-white border-gray-100";
-    
-  const textClass = isUrgent ? "text-red-700 font-bold" : "text-slate-700";
+  const urgentClass = isUrgent ? "bg-red-50 border-red-300" : "";
 
   return (
     <div 
       ref={setNodeRef} style={style} 
-      className={`p-4 rounded-xl border-2 transition-all shadow-sm ${bgClass} ${
-        isOverlay ? "border-blue-500 shadow-xl scale-105" : isMine ? "border-blue-100" : "border-gray-50"
+      className={`p-4 rounded-xl border-2 transition-all shadow-sm ${myTaskClass} ${urgentClass} ${
+        isOverlay ? "border-blue-500 shadow-xl scale-105" : ""
       }`}
     >
       <div {...attributes} {...listeners} className={isMine ? "cursor-grab" : "cursor-default"}>
         <div className="flex justify-between items-start mb-1">
-          <p className="text-[10px] text-gray-400 font-bold">{userName}</p>
-          {status === "overdue" && <span className="text-[10px] text-red-600 font-bold">期限切れ</span>}
-          {status === "today" && <span className="text-[10px] text-red-600 font-bold">本日まで</span>}
+          <div className="flex items-center gap-1">
+            <p className={`text-[10px] font-bold ${isMine ? "text-blue-600" : "text-gray-400"}`}>
+              {userName} {isMine && "(あなた)"}
+            </p>
+          </div>
+          {due_date === todayStr && <span className="text-[10px] text-red-600 font-bold">本日!</span>}
         </div>
-        <p className={`text-sm ${textClass}`}>{content}</p>
+        <p className={`text-sm font-medium ${isUrgent ? "text-red-700" : "text-slate-700"}`}>
+          {content}
+        </p>
       </div>
 
       <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-50">
