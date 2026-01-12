@@ -112,7 +112,7 @@ export default function Home() {
     }
   };
 
-  const handleDragEnd = async (e: DragEndEvent) => {
+const handleDragEnd = async (e: DragEndEvent) => {
     const { active, over } = e;
     setActiveId(null);
     if (!over) return;
