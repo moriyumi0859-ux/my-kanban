@@ -14,46 +14,51 @@ export function TaskCard({ id, content, due_date, userName, currentUserName, onD
 
   const isMine = userName === currentUserName;
 
-  // 期限チェック：文字列で比較
   const todayStr = new Date().toLocaleDateString('sv-SE');
   const isUrgent = due_date && due_date <= todayStr;
 
-  // --- 【強調表示のロジック】 ---
-  // 自分のタスク：青い光の枠 (ring) をつける
-  // 他人のタスク：少し背景をグレーにして透明度を下げる
-  const myTaskClass = isMine 
-    ? "ring-2 ring-blue-400 border-blue-200 bg-white" 
-    : "bg-slate-50/50 border-gray-100 opacity-80";
+  // --- 【視認性を極限まで上げたデザイン設定】 ---
+  // 自分のタスク：青い太枠 + 影 + 外側の光
+  // 他人のタスク：薄い背景 + 文字を薄く
+  const appearanceClass = isMine 
+    ? "border-blue-500 bg-white shadow-md ring-4 ring-blue-100" 
+    : "border-gray-200 bg-slate-50 opacity-60 grayscale-[0.5]";
 
-  const urgentClass = isUrgent ? "bg-red-50 border-red-300" : "";
+  // 期限切れ・当日の赤い背景（自分のタスクの時だけより赤く）
+  const urgentClass = isUrgent ? "bg-red-50 border-red-400 ring-red-100" : "";
 
   return (
     <div 
       ref={setNodeRef} style={style} 
-      className={`p-4 rounded-xl border-2 transition-all shadow-sm ${myTaskClass} ${urgentClass} ${
-        isOverlay ? "border-blue-500 shadow-xl scale-105" : ""
+      className={`p-4 rounded-xl border-2 transition-all duration-300 ${appearanceClass} ${urgentClass} ${
+        isOverlay ? "border-blue-600 shadow-2xl scale-105" : ""
       }`}
     >
       <div {...attributes} {...listeners} className={isMine ? "cursor-grab" : "cursor-default"}>
         <div className="flex justify-between items-start mb-1">
           <div className="flex items-center gap-1">
-            <p className={`text-[10px] font-bold ${isMine ? "text-blue-600" : "text-gray-400"}`}>
-              {userName} {isMine && "(あなた)"}
+            {/* 自分の名前にアイコンを添える */}
+            <p className={`text-[10px] font-black ${isMine ? "text-blue-700" : "text-gray-400"}`}>
+              {isMine ? "★ " : ""}{userName} {isMine && "(あなた)"}
             </p>
           </div>
-          {due_date === todayStr && <span className="text-[10px] text-red-600 font-bold">本日!</span>}
+          {due_date === todayStr && (
+            <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold animate-pulse">
+              本日!
+            </span>
+          )}
         </div>
-        <p className={`text-sm font-medium ${isUrgent ? "text-red-700" : "text-slate-700"}`}>
+        <p className={`text-sm font-bold ${isUrgent ? "text-red-700" : isMine ? "text-slate-800" : "text-gray-500"}`}>
           {content}
         </p>
       </div>
 
-      <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-50">
+      <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
         <div className={`flex items-center gap-1 ${isUrgent ? "text-red-500" : "text-gray-400"}`}>
           {due_date && (
             <>
               <Calendar size={12} />
-              <span className="text-[10px]">{due_date}</span>
+              <span className="text-[10px] font-bold">{due_date}</span>
             </>
           )}
         </div>
