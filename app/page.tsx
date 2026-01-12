@@ -5,7 +5,7 @@ import React, { useState, useEffect } from "react";
 import { User } from "lucide-react";
 import { 
   DndContext, closestCorners, DragEndEvent, DragOverEvent, DragStartEvent,
-  PointerSensor, useSensor, useSensors, DragOverlay 
+  PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Column } from "./Column";
@@ -24,7 +24,8 @@ export default function Home() {
   const [passInput, setPassInput] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // 1. センサーの感度を調整（移動しやすくするため）
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 3 } }));
 
   useEffect(() => {
     const saved = localStorage.getItem("kanban-user");
@@ -44,7 +45,6 @@ export default function Home() {
     return () => { supabase.removeChannel(channel); };
   }, [userName]);
 
-  // 日付順に読み込むが、ドラッグ中の状態を邪魔しないようにします
   const fetchTasks = async () => {
     const { data } = await supabase
       .from("tasks")
@@ -62,9 +62,7 @@ export default function Home() {
       setUserName(data.name); setIsLoggedIn(true);
       localStorage.setItem("kanban-user", data.name);
       fetchTasks();
-    } else {
-      alert("ログイン失敗");
-    }
+    } else { alert("ログイン失敗"); }
   };
 
   const handleRegister = async () => {
@@ -105,11 +103,20 @@ export default function Home() {
     const activeIdStr = String(active.id);
     const overIdStr = String(over.id);
     const activeTask = tasks.find(t => t.id === activeIdStr);
+    
+    // 自分のタスク以外は動かさない
     if (!activeTask || activeTask.user_name !== userName) return;
 
-    const overColId = COLUMNS.some(c => c.id === overIdStr) ? overIdStr : tasks.find(t => t.id === overIdStr)?.status;
+    // 2. 移動先のカラムIDを特定するロジックを強化
+    const overColId = COLUMNS.some(c => c.id === overIdStr) 
+      ? overIdStr 
+      : tasks.find(t => t.id === overIdStr)?.status;
+
     if (overColId && activeTask.status !== overColId) {
-      setTasks(prev => prev.map(t => t.id === activeIdStr ? { ...t, status: overColId } : t));
+      setTasks(prev => {
+        const updated = prev.map(t => t.id === activeIdStr ? { ...t, status: overColId } : t);
+        return updated;
+      });
     }
   };
 
@@ -123,17 +130,24 @@ export default function Home() {
     const activeTask = tasks.find(t => t.id === activeIdStr);
 
     if (activeTask && activeTask.user_name === userName) {
-      // データベースを更新（移動を確定）
-      await supabase.from("tasks").update({ status: activeTask.status }).eq("id", active.id);
-      
-      if (activeIdStr !== overIdStr) {
-        setTasks((prev) => {
-          const oldIndex = prev.findIndex((t) => t.id === activeIdStr);
-          const newIndex = prev.findIndex((t) => t.id === overIdStr);
-          return arrayMove(prev, oldIndex, newIndex);
-        });
+      // 3. データベースへの保存を待たずに状態を確定させる
+      const oldIndex = tasks.findIndex((t) => t.id === activeIdStr);
+      const newIndex = tasks.findIndex((t) => t.id === overIdStr);
+
+      if (activeIdStr !== overIdStr && newIndex !== -1) {
+        setTasks((prev) => arrayMove(prev, oldIndex, newIndex));
       }
+
+      // 非同期でDBを更新
+      await supabase.from("tasks").update({ status: activeTask.status }).eq("id", active.id);
     }
+  };
+
+  // ドラッグ中のアニメーション設定
+  const dropAnimation = {
+    sideEffects: defaultDropAnimationSideEffects({
+      styles: { active: { opacity: "0.5" } },
+    }),
   };
 
   if (!isLoggedIn) return (
@@ -169,15 +183,29 @@ export default function Home() {
           </div>
         </form>
 
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+        <DndContext 
+          sensors={sensors} 
+          collisionDetection={closestCorners} 
+          onDragStart={handleDragStart} 
+          onDragOver={handleDragOver} 
+          onDragEnd={handleDragEnd}
+        >
           <div className="flex gap-6 justify-center">
             {COLUMNS.map(col => (
               <Column key={col.id} id={col.id} title={col.title} tasks={tasks.filter(t => t.status === col.id)} currentUserName={userName} onDelete={deleteTask} onUpdateDate={updateTaskDate} />
             ))}
           </div>
-          <DragOverlay>
+          <DragOverlay dropAnimation={dropAnimation}>
             {activeId ? (
-              <TaskCard id={activeId} content={tasks.find(t => t.id === activeId)?.content} due_date={tasks.find(t => t.id === activeId)?.due_date} userName={tasks.find(t => t.id === activeId)?.user_name} currentUserName={userName} onDelete={() => {}} isOverlay />
+              <TaskCard 
+                id={activeId} 
+                content={tasks.find(t => t.id === activeId)?.content} 
+                due_date={tasks.find(t => t.id === activeId)?.due_date} 
+                userName={tasks.find(t => t.id === activeId)?.user_name} 
+                currentUserName={userName} 
+                onDelete={() => {}} 
+                isOverlay 
+              />
             ) : null}
           </DragOverlay>
         </DndContext>
