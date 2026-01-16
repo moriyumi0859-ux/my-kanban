@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import React, { useState, useEffect } from "react";
-import { User } from "lucide-react";
+import { User, Users } from "lucide-react";
 import { 
   DndContext, closestCorners, DragEndEvent, DragOverEvent, DragStartEvent,
   PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects
@@ -23,8 +23,10 @@ export default function Home() {
   const [loginInput, setLoginInput] = useState("");
   const [passInput, setPassInput] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
+  
+  // --- プレゼンス用の状態：今ログインしている人のリスト ---
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
-  // 1. センサーの感度を調整（移動しやすくするため）
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 3 } }));
 
   useEffect(() => {
@@ -32,18 +34,39 @@ export default function Home() {
     if (saved) { setUserName(saved); setIsLoggedIn(true); }
     fetchTasks();
 
-    const channel = supabase
-      .channel("tasks-changes")
+    if (!isLoggedIn || !userName) return;
+
+    // --- リアルタイム監視 & プレゼンス設定 ---
+    const channel = supabase.channel("room-1", {
+      config: { presence: { key: userName } }
+    });
+
+    channel
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (payload) => {
         if (payload.new.user_name !== userName) {
           alert(`${payload.new.user_name}さんが新しいタスクを追加しました！`);
           fetchTasks(); 
         }
       })
-      .subscribe();
+      // 誰かがログイン/ログアウトした時の動き
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        // ログイン中の名前だけを抽出してリストにする
+        const names = Object.keys(state);
+        setOnlineUsers(names);
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          // 自分の存在をみんなに知らせる
+          await channel.track({ online_at: new Date().toISOString() });
+        }
+      });
 
-    return () => { supabase.removeChannel(channel); };
-  }, [userName]);
+    return () => {
+      channel.unsubscribe();
+      supabase.removeChannel(channel);
+    };
+  }, [userName, isLoggedIn]);
 
   const fetchTasks = async () => {
     const { data } = await supabase
@@ -101,22 +124,15 @@ export default function Home() {
     const { active, over } = e;
     if (!over) return;
     const activeIdStr = String(active.id);
-    const overIdStr = String(over.id);
     const activeTask = tasks.find(t => t.id === activeIdStr);
-    
-    // 自分のタスク以外は動かさない
     if (!activeTask || activeTask.user_name !== userName) return;
 
-    // 2. 移動先のカラムIDを特定するロジックを強化
-    const overColId = COLUMNS.some(c => c.id === overIdStr) 
-      ? overIdStr 
-      : tasks.find(t => t.id === overIdStr)?.status;
+    const overColId = COLUMNS.some(c => c.id === String(over.id)) 
+      ? String(over.id) 
+      : tasks.find(t => t.id === String(over.id))?.status;
 
     if (overColId && activeTask.status !== overColId) {
-      setTasks(prev => {
-        const updated = prev.map(t => t.id === activeIdStr ? { ...t, status: overColId } : t);
-        return updated;
-      });
+      setTasks(prev => prev.map(t => t.id === activeIdStr ? { ...t, status: overColId } : t));
     }
   };
 
@@ -130,24 +146,13 @@ export default function Home() {
     const activeTask = tasks.find(t => t.id === activeIdStr);
 
     if (activeTask && activeTask.user_name === userName) {
-      // 3. データベースへの保存を待たずに状態を確定させる
       const oldIndex = tasks.findIndex((t) => t.id === activeIdStr);
       const newIndex = tasks.findIndex((t) => t.id === overIdStr);
-
       if (activeIdStr !== overIdStr && newIndex !== -1) {
         setTasks((prev) => arrayMove(prev, oldIndex, newIndex));
       }
-
-      // 非同期でDBを更新
       await supabase.from("tasks").update({ status: activeTask.status }).eq("id", active.id);
     }
-  };
-
-  // ドラッグ中のアニメーション設定
-  const dropAnimation = {
-    sideEffects: defaultDropAnimationSideEffects({
-      styles: { active: { opacity: "0.5" } },
-    }),
   };
 
   if (!isLoggedIn) return (
@@ -167,45 +172,65 @@ export default function Home() {
   return (
     <main className="p-8 bg-slate-50 min-h-screen">
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-10">
-          <h1 className="text-2xl font-bold text-blue-600">Project Board</h1>
-          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border shadow-sm">
-            <User size={16} /> <span className="font-bold text-sm">{userName} さん</span>
-            <button onClick={() => { setIsLoggedIn(false); localStorage.removeItem("kanban-user"); }} className="text-red-500 text-xs ml-2 font-bold">ログアウト</button>
+        <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-10">
+          <div>
+            <h1 className="text-3xl font-black text-blue-600 tracking-tight">Project Board</h1>
+            {/* --- ログイン中のメンバー一覧を表示 --- */}
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex -space-x-2">
+                {onlineUsers.map((name, i) => (
+                  <div key={i} className="w-8 h-8 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center text-[10px] text-white font-bold shadow-sm" title={name}>
+                    {name.substring(0, 1)}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 font-medium ml-1">
+                {onlineUsers.length}人がオンライン
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4 bg-white px-6 py-3 rounded-2xl border-2 border-blue-100 shadow-sm">
+            <div className="relative">
+              <div className="bg-blue-100 p-2 rounded-full">
+                <User size={20} className="text-blue-600" />
+              </div>
+              <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-slate-800">{userName} さん</span>
+                <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
+                  作業中
+                </span>
+              </div>
+              <button 
+                onClick={() => { setIsLoggedIn(false); localStorage.removeItem("kanban-user"); window.location.reload(); }} 
+                className="text-slate-400 text-[10px] text-left hover:text-red-500 transition-colors font-medium underline"
+              >
+                ログアウトする
+              </button>
+            </div>
           </div>
         </div>
 
-        <form onSubmit={addTask} className="max-w-md mx-auto mb-10 flex flex-col gap-2 bg-white p-4 rounded-xl shadow-sm border">
-          <input className="border p-2 rounded-lg outline-none" value={newTaskContent} onChange={e => setNewTaskContent(e.target.value)} placeholder="タスクを入力..." />
+        <form onSubmit={addTask} className="max-w-md mx-auto mb-10 flex flex-col gap-2 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <input className="border-slate-200 border p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 transition-all" value={newTaskContent} onChange={e => setNewTaskContent(e.target.value)} placeholder="新しいタスクを計画しましょう" />
           <div className="flex gap-2">
-            <input className="border p-2 rounded-lg text-sm flex-1 outline-none" type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">追加</button>
+            <input className="border-slate-200 border p-3 rounded-xl text-sm flex-1 outline-none" type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
+            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-xl font-bold transition-colors">追加</button>
           </div>
         </form>
 
-        <DndContext 
-          sensors={sensors} 
-          collisionDetection={closestCorners} 
-          onDragStart={handleDragStart} 
-          onDragOver={handleDragOver} 
-          onDragEnd={handleDragEnd}
-        >
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
           <div className="flex gap-6 justify-center">
             {COLUMNS.map(col => (
               <Column key={col.id} id={col.id} title={col.title} tasks={tasks.filter(t => t.status === col.id)} currentUserName={userName} onDelete={deleteTask} onUpdateDate={updateTaskDate} />
             ))}
           </div>
-          <DragOverlay dropAnimation={dropAnimation}>
+          <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0.5" } } }) }}>
             {activeId ? (
-              <TaskCard 
-                id={activeId} 
-                content={tasks.find(t => t.id === activeId)?.content} 
-                due_date={tasks.find(t => t.id === activeId)?.due_date} 
-                userName={tasks.find(t => t.id === activeId)?.user_name} 
-                currentUserName={userName} 
-                onDelete={() => {}} 
-                isOverlay 
-              />
+              <TaskCard id={activeId} content={tasks.find(t => t.id === activeId)?.content} due_date={tasks.find(t => t.id === activeId)?.due_date} userName={tasks.find(t => t.id === activeId)?.user_name} currentUserName={userName} onDelete={() => {}} isOverlay />
             ) : null}
           </DragOverlay>
         </DndContext>
